@@ -36,8 +36,19 @@ typedef struct loc_info {
 /*******************************************************
  * 宏定义
  *******************************************************/
+#define BUF_NUM 20
+
 #define is_branch(ud_obj) \
 	(ud_insn_mnemonic(ud_obj)==UD_Icall || ud_insn_mnemonic(ud_obj)==UD_Iiretw || ud_insn_mnemonic(ud_obj)==UD_Iiretd || ud_insn_mnemonic(ud_obj)==UD_Iiretq || (ud_insn_mnemonic(ud_obj)>=UD_Ijo && ud_insn_mnemonic(ud_obj)<=UD_Ijmp) || ud_insn_mnemonic(ud_obj)==UD_Iret || ud_insn_mnemonic(ud_obj)==UD_Iretf)
+
+#define is_ret(ud_obj) \
+	(ud_insn_mnemonic(ud_obj)==UD_Iiretw || ud_insn_mnemonic(ud_obj)==UD_Iiretd || ud_insn_mnemonic(ud_obj)==UD_Iiretq || ud_insn_mnemonic(ud_obj)==UD_Iret || ud_insn_mnemonic(ud_obj)==UD_Iretf)
+
+#define is_conditional_branch(ud_obj) \
+	ud_insn_mnemonic(ud_obj)>=UD_Ijo && ud_insn_mnemonic(ud_obj)<UD_Ijmp
+
+#define is_unconditional_branch(ud_obj) \
+	(ud_insn_mnemonic(ud_obj)==UD_Ijmp || ud_insn_mnemonic(ud_obj)==UD_Icall)
 
 #define SET_SEC_INFO(name) \
 	if(!strcmp(sec_name+1, #name)){ \
@@ -150,12 +161,12 @@ void set_break_recover(int pid, UINT_T addr)
 /*******************************************************
  * set_buf()
  *******************************************************/
-inline void set_buf(int pid, UINT_T addr)
+inline void set_buf(int pid, UINT_T addr, UINT_T num)
 {
 	int i;
-	for(i=0;i<5;i++)
+	for(i=0;i<num;i++)
 		ud_buf[i]=ptrace(PTRACE_PEEKTEXT, pid, addr+i*sizeof(UINT_T), 0);
-	ud_set_input_buffer(&ud_obj, (uint8_t*)ud_buf, 5*sizeof(UINT_T));
+	ud_set_input_buffer(&ud_obj, (uint8_t*)ud_buf, num*sizeof(UINT_T));
 	ud_set_pc(&ud_obj, addr);
 }
 
@@ -165,11 +176,7 @@ inline void set_buf(int pid, UINT_T addr)
 UINT_T plt_handler(int pid, UINT_T addr)
 {
 	//反汇编得到目标地址所在的.got.plt表中偏移
-	int i;
-	for(i=0;i<6;i++)
-		ud_buf[i]=ptrace(PTRACE_PEEKTEXT, pid, addr+i*sizeof(UINT_T), 0);
-	ud_set_input_buffer(&ud_obj, (uint8_t*)ud_buf, 6);
-	ud_set_pc(&ud_obj, addr);
+	set_buf(pid, addr, 2);
 	ud_disassemble(&ud_obj);
 	fdis << "0x" << setiosflags(ios::left)<< setw(8) << ud_insn_off(&ud_obj) << "\t"
 		   << setw(8) << ud_insn_hex(&ud_obj) << "\t"
@@ -233,13 +240,13 @@ inline void par_process(int pid)
 	set_break_recover(pid, sec_info[entry].addr);
 
 	//初始化libudis
-	ud_buf = (UINT_T*)malloc(5*sizeof(UINT_T));
+	ud_buf = (UINT_T*)malloc(BUF_NUM*sizeof(UINT_T));
 	ud_init(&ud_obj);
 	ud_set_mode(&ud_obj, 32);
 	ud_set_syntax(&ud_obj, UD_SYN_ATT);
 
 	//读和设置缓冲
-	set_buf(pid, sec_info[entry].addr);
+	set_buf(pid, sec_info[entry].addr, BUF_NUM);
 
 	UINT_T old_addr=0;
 	UINT_T old_size=0;
@@ -247,7 +254,8 @@ inline void par_process(int pid)
 	{
 		if(ud_insn_mnemonic(&ud_obj)==UD_Iinvalid)
 		{
-			set_buf(pid, old_addr+old_size);
+			if(old_addr==addr)				
+			set_buf(pid, old_addr+old_size, BUF_NUM);
 			continue;
 		}
 		fdis << "0x" << setiosflags(ios::left)<< setw(8) << ud_insn_off(&ud_obj) << "\t"
@@ -256,31 +264,62 @@ inline void par_process(int pid)
 			   << setw(20) << ud_insn_asm(&ud_obj) << endl;
 		if(is_branch(&ud_obj))
 		{
-			if(ud_insn_mnemonic(&ud_obj)==UD_Iret)
-			{
-				exit(-1);
-			}
-			//判断是直接还是间接分支
+			//判断是否为无条件直接分支
 			ud_opr = ud_insn_opr(&ud_obj, 0);
-			if(ud_opr->type==UD_OP_JIMM)
+			if(is_unconditional_branch(&ud_obj))
 			{
 
 				UINT_T addr = direct_branch_handler(pid);
-				cout << "target addr: 0x" << addr << endl;
-				set_buf(pid, addr);
+				cout << "origin addr: 0x" << ud_insn_off(&ud_obj) << "\ttarget addr: 0x" << addr << endl;
+				set_break_recover(pid, addr);
+				set_buf(pid, addr, BUF_NUM);
+				old_addr = addr;
+				fdis << endl;
+				continue;
+			}
+
+			//在这里设置断点并执行到下一条指令
+			set_break_recover(pid, ud_insn_off(&ud_obj));
+			ptrace(PTRACE_SINGLESTEP, pid, 0, 0);
+			ptrace(PTRACE_GETREGS, pid, 0, &regs);
+			UINT_T addr = regs.eip;
+			cout << "origin addr: 0x" << ud_insn_off(&ud_obj) << "\ttarget addr: 0x" << addr << endl;
+			set_buf(pid, addr, BUF_NUM);
+			old_addr = addr;
+			fdis << endl;
+//			continue;
+
+/*			if(is_ret(&ud_obj))
+			{
+				//在这里设置断点并执行到下一条指令
+				set_break_recover(pid, ud_insn_off(&ud_obj));
+				ptrace(PTRACE_SINGLESTEP, pid, 0, 0);
+				ptrace(PTRACE_GETREGS, pid, 0, &regs);
+				UINT_T addr = regs.eip;
+				cout << "origin addr: 0x" << ud_insn_off(&ud_obj) << "\ttarget addr: 0x" << addr << endl;
+				set_buf(pid, addr, BUF_NUM);
+				fdis << endl;
 				continue;
 			}
 			else
 			{
-				exit(-1);
+				//在这里设置断点并执行到下一条指令
+				set_break_recover(pid, ud_insn_off(&ud_obj));
+				ptrace(PTRACE_SINGLESTEP, pid, 0, 0);
+				ptrace(PTRACE_GETREGS, pid, 0, &regs);
+				UINT_T addr = regs.eip;
+				cout << "origin addr: 0x" << ud_insn_off(&ud_obj) << "\ttarget addr: 0x" << addr << endl;
+				set_buf(pid, addr, BUF_NUM);
+				fdis << endl;
+				continue;
 			}
-		}
+*/		}
 		old_addr = ud_insn_off(&ud_obj);
 		old_size = ud_insn_len(&ud_obj);
 	}
 
 	//反汇编到分支指令,在这里设置断点
-	set_break_recover(pid, ud_insn_off(&ud_obj));
+//	set_break_recover(pid, ud_insn_off(&ud_obj));
 
 }
 
