@@ -5,20 +5,20 @@ ELF_INCLUDE := /home/user/Documents/libelf-0.8.13/build/include/
 UDIS86_LIBRARY := /home/user/Documents/udis86-1.7.2/build/lib/
 ELF_LIBRARY := /home/user/Documents/libelf-0.8.13/build/lib/
 
-CXXFLAGS := -c -g -I $(UDIS86_INCLUDE) -I $(ELF_INCLUDE)
+CXXFLAGS := -c -g -I $(UDIS86_INCLUDE) -I $(ELF_INCLUDE) -D_GNU_SOURCE -std=c++11
 LDFLAGS := -I $(UDIS86_INCLUDE) -I $(ELF_INCLUDE) -L $(UDIS86_LIBRARY) -L $(ELF_LIBRARY)
 
 EXECUTE := read_maps
-SOURCE := $(EXECUTE).cpp
-OBJECT := $(EXECUTE).o
+SOURCE := $(wildcard *.cpp)
+OBJECT := $(SOURCE:.cpp=.o)
+OUTPUT := $(wildcard *.out)
 
 all:  $(EXECUTE)
 
 $(EXECUTE): $(OBJECT)
-	$(CXX) $(LDFLAGS) -o $(EXECUTE) $(OBJECT) -ludis86 -lelf
+	$(CXX) $(LDFLAGS) -o $(EXECUTE) $(OBJECT) -ludis86 -lelf -ldl
 
 $(OBJECT): $(SOURCE)
-	$(CXX) $(CXXFLAGS) -o $(OBJECT) $(SOURCE)
 
 clean:
-	rm $(EXECUTE) $(OBJECT)
+	rm $(EXECUTE) $(OBJECT) $(OUTPUT) core

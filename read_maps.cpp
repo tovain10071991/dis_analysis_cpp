@@ -1,328 +1,50 @@
-#include <sys/ptrace.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <sys/user.h>
-#include <gelf.h>
-#include <fcntl.h>
-#include <udis86.h>
-#include <string.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <sys/wait.h>
+#include <sys/ptrace.h>	//ptrace
+#include <unistd.h>		//fork, execve
+#include <stdio.h>		//perror
+#include <stdlib.h>		//exit
+#include <sys/wait.h>	//wait
+#include <string>		//string
+#include <gelf.h>		//elf_version
 
-#include <fstream>
-#include <iomanip>
-#include <iostream>
-
-#include "mnemonic.h"
-#include "sec_index.h"
+//#include "type"
+#include "file.h"			//文件类
+#include "dbg.h"			//调试器类
+//#include "any"		//分析类
+#include "proc.h"			//进程类
 
 using namespace std;
+using namespace skyin;
 
 /*******************************************************
- * 类型定义
+ * par_process()
  *******************************************************/
-typedef Elf32_Addr UINT_T;
-typedef unsigned int UINT_T;
-typedef unsigned short USHORT_T;
-typedef Elf32_Half USHORT_T;
-
-typedef struct loc_info {
-	UINT_T addr;
-	UINT_T offset;
-	UINT_T size;
-} loc_info;
-
-/*******************************************************
- * 宏定义
- *******************************************************/
-#define BUF_NUM 20
-
-#define is_branch(ud_obj) \
-	(ud_insn_mnemonic(ud_obj)==UD_Icall || ud_insn_mnemonic(ud_obj)==UD_Iiretw || ud_insn_mnemonic(ud_obj)==UD_Iiretd || ud_insn_mnemonic(ud_obj)==UD_Iiretq || (ud_insn_mnemonic(ud_obj)>=UD_Ijo && ud_insn_mnemonic(ud_obj)<=UD_Ijmp) || ud_insn_mnemonic(ud_obj)==UD_Iret || ud_insn_mnemonic(ud_obj)==UD_Iretf)
-
-#define is_ret(ud_obj) \
-	(ud_insn_mnemonic(ud_obj)==UD_Iiretw || ud_insn_mnemonic(ud_obj)==UD_Iiretd || ud_insn_mnemonic(ud_obj)==UD_Iiretq || ud_insn_mnemonic(ud_obj)==UD_Iret || ud_insn_mnemonic(ud_obj)==UD_Iretf)
-
-#define is_conditional_branch(ud_obj) \
-	ud_insn_mnemonic(ud_obj)>=UD_Ijo && ud_insn_mnemonic(ud_obj)<UD_Ijmp
-
-#define is_unconditional_branch(ud_obj) \
-	(ud_insn_mnemonic(ud_obj)==UD_Ijmp || ud_insn_mnemonic(ud_obj)==UD_Icall)
-
-#define SET_SEC_INFO(name) \
-	if(!strcmp(sec_name+1, #name)){ \
-		sec_info[name].addr = shdr.sh_addr; \
-		sec_info[name].offset = shdr.sh_offset; \
-		sec_info[name].size = shdr.sh_size; \
-		continue; \
-	}
-
-/*******************************************************
- * 全局变量
- *******************************************************/
-loc_info sec_info[index_max];
-
-UINT_T breakpoint;		//断点地址
-UINT_T diff;			//代码地址与文件偏移的差值
-struct user_regs_struct regs;
-//用于libelf的变量
-int input;
-Elf* elf;
-GElf_Ehdr ehdr;
-GElf_Phdr phdr;
-GElf_Shdr shdr;
-Elf_Scn* scn;
-size_t shdrstrndx;		//节名符号表索引
-GElf_Shdr shdrstr;		//节名符号表头项
-//用于liibudis的变量
-UINT_T* ud_buf;
-ud_t ud_obj;
-const ud_operand_t* ud_opr;
-//输出文件
-ofstream fdis;
-ofstream fsec_info;
-
-
-/*******************************************************
- * get_sec_info()
- *******************************************************/
-void get_sec_info()
+inline void par_process(int pid, string inputPath)
 {
-	sec_info[entry].addr = ehdr.e_entry;
+	wait(NULL);
+	//初始化各种类
+	File* file = new File();
+	elf_version(EV_CURRENT);
+	//初始化进程类,读进程入口地址
+	Process* process = new Process(pid, inputPath);
+	//初始化调试器类,执行跳过ld
+	Debugger* debugger = new Debugger(process);
+	//获取已装载模块的信息
+	process->initModules();
 
-	int i;
-	for(i=0;i<ehdr.e_phnum;i++)
-	{
-		gelf_getphdr(elf, i, &phdr);
-		if(sec_info[entry].addr>=phdr.p_vaddr&&sec_info[entry].addr<=phdr.p_vaddr+phdr.p_memsz)
-			break;
-	}
-	//定位包含代码的segment
-	sec_info[entry].offset = sec_info[entry].addr-(phdr.p_vaddr-phdr.p_offset);	
+//	Analyser analyser();
 
-	//初始化各种偏移和地址
-	//初始化shdrstrndx
-	elf_getshdrstrndx(elf, &shdrstrndx);
-	//初始化shdrstr
-	Elf_Scn* shdrstrscn = elf_getscn(elf, shdrstrndx);
-	gelf_getshdr(shdrstrscn, &shdrstr);
-	//找到各种表并初始化地址
-	scn=NULL;
-	while((scn=elf_nextscn(elf, scn))!=NULL)
-	{
-		gelf_getshdr(scn, &shdr);
-		char* sec_name;
-		sec_name = elf_strptr(elf, shdrstrndx, shdr.sh_name);
-		SET_SEC_INFO(dynsym)
-		SET_SEC_INFO(init)
-		SET_SEC_INFO(plt)
-		SET_SEC_INFO(text)
-		SET_SEC_INFO(fini)
-		SET_SEC_INFO(got)
-		SET_SEC_INFO(data)
-		if(!strcmp(sec_name+1, "got.plt")){
-			sec_info[got_plt].addr = shdr.sh_addr;
-			sec_info[got_plt].offset = shdr.sh_offset;
-			sec_info[got_plt].size = shdr.sh_size;
-			continue;
-		}
-	}
-	for(int i=0;i<index_max;i++)
-		fsec_info << sec_info[i].addr << "\t" << sec_info[i].offset << "\t" << sec_info[i].size << endl;
-	return;
-}
+	//以trace为粒度，每执行一个trace，就进行反汇编
+	//先读取一个trace,再分析,再执行
+//	while(1)
+//	{
+		
+//		debugger.contBranch();
+//		analyser.disassemble();
+//	}
 
-/*******************************************************
- * set_break_recover()
- *******************************************************/
-void set_break_recover(int pid, UINT_T addr)
-{
-	//设置断点
-	//将addr的头一个字节(第一个字的低字节)换成0xCC
-	breakpoint=ptrace(PTRACE_PEEKTEXT, pid, addr, 0);
-	UINT_T temp = breakpoint & 0xFFFFFF00 | 0xCC;
-	ptrace(PTRACE_POKETEXT, pid, addr, temp);
-
-	//执行子进程
 	ptrace(PTRACE_CONT, pid, 0, 0);
 	wait(NULL);
-	printf("meet breakpoint: ");
-
-	//恢复断点
-	ptrace(PTRACE_GETREGS, pid, NULL, &regs);
-	//软件断点会在断点的下一个字节停住,所以还要将EIP向前恢复一个字节
-	regs.eip-=1;
-	printf("0x%lx\n", regs.eip);
-	ptrace(PTRACE_SETREGS, pid, NULL, &regs);
-	ptrace(PTRACE_POKETEXT, pid, regs.eip, breakpoint);
 }
-
-/*******************************************************
- * set_buf()
- *******************************************************/
-inline void set_buf(int pid, UINT_T addr, UINT_T num)
-{
-	int i;
-	for(i=0;i<num;i++)
-		ud_buf[i]=ptrace(PTRACE_PEEKTEXT, pid, addr+i*sizeof(UINT_T), 0);
-	ud_set_input_buffer(&ud_obj, (uint8_t*)ud_buf, num*sizeof(UINT_T));
-	ud_set_pc(&ud_obj, addr);
-}
-
-/*******************************************************
- * plt_handler()
- *******************************************************/
-UINT_T plt_handler(int pid, UINT_T addr)
-{
-	//反汇编得到目标地址所在的.got.plt表中偏移
-	set_buf(pid, addr, 2);
-	ud_disassemble(&ud_obj);
-	fdis << "0x" << setiosflags(ios::left)<< setw(8) << ud_insn_off(&ud_obj) << "\t"
-		   << setw(8) << ud_insn_hex(&ud_obj) << "\t"
-		   << setw(20) << mnemonic_name[ud_insn_mnemonic(&ud_obj)] << "\t"
-		   << setw(20) << ud_insn_asm(&ud_obj) << endl;
-
-	ud_opr = ud_insn_opr(&ud_obj, 0);
-
-	printf("got_plt: %x\n",sec_info[got_plt].addr);
-
-	UINT_T org;
-	org = ptrace(PTRACE_PEEKDATA, pid, ud_opr->lval.sdword, 0);
-	printf("org: %x\n", org);
-	UINT_T real;
-	while(1){
-		ptrace(PTRACE_SINGLESTEP, pid, 0, 0);
-		real = ptrace(PTRACE_PEEKTEXT, pid, ud_opr->lval.sdword, 0);
-		if(real!=0xffffffff&&real!=org)
-		{
-			printf("real: %x\n", real);
-			break;
-		}
-	}
-	return real;
-}
-
-/*******************************************************
- * direct_branch_handler()
- *******************************************************/
-UINT_T direct_branch_handler(int pid)
-{
-	//判断地址是不是.plt段
-	UINT_T target = ud_insn_off(&ud_obj)+ud_insn_len(&ud_obj)+ud_opr->lval.sdword;
-	if(target>=sec_info[plt].addr&&target<=sec_info[plt].addr+sec_info[plt].size)
-		return plt_handler(pid, target);
-	else
-		return target;
-}
-
-inline void par_process(int pid)
-{
-	wait(NULL);
-
-	//设置文件描述符
-	input = open("/bin/ls", O_RDONLY, 0);
-	fdis.open("ls.dis");
-	fsec_info.open("sec.info");
-	fdis << hex;
-	fsec_info << hex;
-	cout << hex;
-	
-	//初始化libelf
-	elf_version(EV_CURRENT);
-	elf = elf_begin(input, ELF_C_READ, NULL);
-	gelf_getehdr(elf, &ehdr);
-
-	//读取各种地址
-	get_sec_info();
-
-	//跳过前面ld的初始化,直到主模块入口q
-	set_break_recover(pid, sec_info[entry].addr);
-
-	//初始化libudis
-	ud_buf = (UINT_T*)malloc(BUF_NUM*sizeof(UINT_T));
-	ud_init(&ud_obj);
-	ud_set_mode(&ud_obj, 32);
-	ud_set_syntax(&ud_obj, UD_SYN_ATT);
-
-	//读和设置缓冲
-	set_buf(pid, sec_info[entry].addr, BUF_NUM);
-
-	UINT_T old_addr=0;
-	UINT_T old_size=0;
-	while (ud_disassemble(&ud_obj))
-	{
-		if(ud_insn_mnemonic(&ud_obj)==UD_Iinvalid)
-		{
-			if(old_addr==addr)				
-			set_buf(pid, old_addr+old_size, BUF_NUM);
-			continue;
-		}
-		fdis << "0x" << setiosflags(ios::left)<< setw(8) << ud_insn_off(&ud_obj) << "\t"
-			   << setw(8) << ud_insn_hex(&ud_obj) << "\t"
-			   << setw(20) << mnemonic_name[ud_insn_mnemonic(&ud_obj)] << "\t"
-			   << setw(20) << ud_insn_asm(&ud_obj) << endl;
-		if(is_branch(&ud_obj))
-		{
-			//判断是否为无条件直接分支
-			ud_opr = ud_insn_opr(&ud_obj, 0);
-			if(is_unconditional_branch(&ud_obj))
-			{
-
-				UINT_T addr = direct_branch_handler(pid);
-				cout << "origin addr: 0x" << ud_insn_off(&ud_obj) << "\ttarget addr: 0x" << addr << endl;
-				set_break_recover(pid, addr);
-				set_buf(pid, addr, BUF_NUM);
-				old_addr = addr;
-				fdis << endl;
-				continue;
-			}
-
-			//在这里设置断点并执行到下一条指令
-			set_break_recover(pid, ud_insn_off(&ud_obj));
-			ptrace(PTRACE_SINGLESTEP, pid, 0, 0);
-			ptrace(PTRACE_GETREGS, pid, 0, &regs);
-			UINT_T addr = regs.eip;
-			cout << "origin addr: 0x" << ud_insn_off(&ud_obj) << "\ttarget addr: 0x" << addr << endl;
-			set_buf(pid, addr, BUF_NUM);
-			old_addr = addr;
-			fdis << endl;
-//			continue;
-
-/*			if(is_ret(&ud_obj))
-			{
-				//在这里设置断点并执行到下一条指令
-				set_break_recover(pid, ud_insn_off(&ud_obj));
-				ptrace(PTRACE_SINGLESTEP, pid, 0, 0);
-				ptrace(PTRACE_GETREGS, pid, 0, &regs);
-				UINT_T addr = regs.eip;
-				cout << "origin addr: 0x" << ud_insn_off(&ud_obj) << "\ttarget addr: 0x" << addr << endl;
-				set_buf(pid, addr, BUF_NUM);
-				fdis << endl;
-				continue;
-			}
-			else
-			{
-				//在这里设置断点并执行到下一条指令
-				set_break_recover(pid, ud_insn_off(&ud_obj));
-				ptrace(PTRACE_SINGLESTEP, pid, 0, 0);
-				ptrace(PTRACE_GETREGS, pid, 0, &regs);
-				UINT_T addr = regs.eip;
-				cout << "origin addr: 0x" << ud_insn_off(&ud_obj) << "\ttarget addr: 0x" << addr << endl;
-				set_buf(pid, addr, BUF_NUM);
-				fdis << endl;
-				continue;
-			}
-*/		}
-		old_addr = ud_insn_off(&ud_obj);
-		old_size = ud_insn_len(&ud_obj);
-	}
-
-	//反汇编到分支指令,在这里设置断点
-//	set_break_recover(pid, ud_insn_off(&ud_obj));
-
-}
-
 
 /*******************************************************
  * main()
@@ -330,18 +52,23 @@ inline void par_process(int pid)
 int main()
 {
 	int pid;
-
+	string inputPath("/bin/ls");
 	//fork进程
-	if((pid=fork())==0)
+	pid=fork();
+	if(pid==0)
 	{
 		ptrace(PTRACE_TRACEME, 0, 0, 0);
-		execl("/bin/ls", "ls", NULL);
+		execl(inputPath.c_str(), "tracee", NULL);
+	}
+	else if(pid>0)
+	{
+		//父进程的工作
+		par_process(pid, inputPath);
 	}
 	else
 	{
-		//父进程的工作
-		par_process(pid);
+		perror("fork");
+		exit(-1);
 	}
 	return 0;
 }
-
