@@ -20,7 +20,7 @@ Process::Process(int pid, string inputPath):
 	regs={0};
 	//先找到进程入口吧
 	mainModule = new Module(0, inputPath);
-	modules[0] = mainModule;
+	modules.push_back(mainModule);
 }
 
 void Process::initModules()
@@ -41,7 +41,7 @@ void Process::initModules()
 		cout << lm->l_addr << "\t" << name << endl;
 		string path(name);
 		Module* module = new Module(lm->l_addr, path);
-		modules[lm->l_addr] = module;
+		modules.push_back(module);
 	}
 }
 

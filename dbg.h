@@ -9,6 +9,7 @@ namespace skyin {
 class Process;
 
 class Debugger {
+	friend class Analyser;
 private:
 	UINT_T breakpoint;				//断点地址
 	Process* process;
@@ -16,10 +17,8 @@ private:
 	void setBreakRecover(UINT_T addr);
 public:
 	Debugger(Process* process);
-
-	void readData(UINT_T addr, size_t size);
 	void readData(UINT_T addr, size_t size, void* data);
-	void contBranch();
+	void singalStep();
 };
 
 }

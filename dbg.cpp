@@ -50,12 +50,11 @@ void Debugger::readData(UINT_T addr, size_t size, void* data)
 	{
 		*(tmp+i) = ptrace(PTRACE_PEEKDATA, process->pid, addr+4*i, 0);
 	}
-	printf("\n");
 	memcpy(data, tmp, size);
 	free(tmp);
 }
 
-void Debugger::contBranch()
+void Debugger::singalStep()
 {
-	
+	ptrace(PTRACE_SINGLESTEP, process->pid, 0, 0);
 }

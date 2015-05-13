@@ -1,7 +1,8 @@
 #ifndef _PROC_H_
 #define _PROC_H_
 
-#include <map>
+#include <vector>
+#include "any.h"
 #include "dbg.h"
 #include "type.h"
 #include <string>
@@ -11,9 +12,11 @@
 namespace skyin {
 
 class Debugger;
+class Analyser;
 
 class Process {
 	friend class Debugger;
+	friend class Analyser;
 private:
 	class Module {
 	public:
@@ -32,7 +35,7 @@ private:
 	int mainFd;	//用于elf
 	int pid;
 	Module* mainModule;
-	std::map<UINT_T, Module*> modules;
+	std::vector<Module*> modules;
 	Debugger* debugger;
 	struct user_regs_struct regs;
 public:

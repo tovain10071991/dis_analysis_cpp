@@ -11,7 +11,7 @@
 //#include "type"
 #include "file.h"			//文件类
 #include "dbg.h"			//调试器类
-#include "any.h"		//分析类
+#include "any.h"			//分析类
 #include "proc.h"			//进程类
 
 using namespace std;
@@ -25,16 +25,18 @@ inline void par_process(int pid, string inputPath)
 	wait(NULL);
 	//初始化各种类
 	File* file = new File();
+	//初始化libelf
 	elf_version(EV_CURRENT);
 	//初始化进程类,读进程入口地址
 	Process* process = new Process(pid, inputPath);
 	//初始化调试器类,执行跳过ld
 	Debugger* debugger = new Debugger(process);
-	Analyser* analyser = new Analyser(debugger);
+	Analyser* analyser = new Analyser(debugger, file);
 	//获取已装载模块的信息
 	process->initModules();
 
-//	Analyser analyser();
+	analyser->readTrace();
+//	analyser->disassemble();
 
 	//以trace为粒度，每执行一个trace，就进行反汇编
 	//先读取一个trace,再分析,再执行
