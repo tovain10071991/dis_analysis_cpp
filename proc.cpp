@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <cstring>
 #include <iostream>
+#include <fstream>
 #include <link.h>
 
 using namespace std;
@@ -16,6 +17,7 @@ Process::Process(int pid, string inputPath):
 		pid(pid),
 		modules()
 {
+	regs={0};
 	//先找到进程入口吧
 	mainModule = new Module(0, inputPath);
 	modules[0] = mainModule;
@@ -25,16 +27,19 @@ void Process::initModules()
 {
 	//从主模块获取链接信息
 	struct link_map* lm = (struct link_map*)malloc(sizeof(struct link_map));
-	UINT_T lmPtr;
+	struct link_map* lmPtr;
 	debugger->readData(mainModule->gotPltAddr+4, 4, &lmPtr);
-	debugger->readData(lmPtr, sizeof(struct link_map), lm);
 	cout << lmPtr << endl;
-	while((lm=lm->l_next)!=NULL)
+	debugger->readData((UINT_T)lmPtr, sizeof(struct link_map), lm);
+	while((lmPtr=lm->l_next)!=NULL)
 	{
-		if(!strcmp(lm->l_name,""))
+		debugger->readData((UINT_T)lmPtr, sizeof(struct link_map), lm);
+		char name[50];
+		debugger->readData((UINT_T)lm->l_name, 50, name);
+		if(!strcmp(name,""))
 			continue;
-		cout << lm->l_addr << "\t" << lm->l_name << endl;
-		string path(lm->l_name);
+		cout << lm->l_addr << "\t" << name << endl;
+		string path(name);
 		Module* module = new Module(lm->l_addr, path);
 		modules[lm->l_addr] = module;
 	}

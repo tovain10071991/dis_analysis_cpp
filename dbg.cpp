@@ -15,7 +15,6 @@ Debugger::Debugger(Process* process):
 		breakpoint(0)
 //		mainModule(mainModule)
 {
-	regs={0};
 	process->debugger=this;
 	setBreakRecover(process->mainModule->ehdr.e_entry);
 }
@@ -25,7 +24,7 @@ void Debugger::setBreakRecover(UINT_T addr)
 	//设置断点
 	//将addr的头一个字节(第一个字的低字节)换成0xCC
 	breakpoint=ptrace(PTRACE_PEEKTEXT, process->pid, addr, 0);
-	ptrace(PTRACE_GETREGS, process->pid, 0, &regs);
+	ptrace(PTRACE_GETREGS, process->pid, 0, &process->regs);
 	UINT_T temp = breakpoint & 0xFFFFFF00 | 0xCC;
 	ptrace(PTRACE_POKETEXT, process->pid, addr, temp);
 
@@ -35,12 +34,12 @@ void Debugger::setBreakRecover(UINT_T addr)
 	printf("meet breakpoint: ");
 
 	//恢复断点
-	ptrace(PTRACE_GETREGS, process->pid, NULL, &regs);
+	ptrace(PTRACE_GETREGS, process->pid, NULL, &process->regs);
 	//软件断点会在断点的下一个字节停住,所以还要将EIP向前恢复一个字节
-	regs.eip-=1;
-	printf("0x%lx\n", regs.eip);
-	ptrace(PTRACE_SETREGS, process->pid, NULL, &regs);
-	ptrace(PTRACE_POKETEXT, process->pid, regs.eip, breakpoint);
+	process->regs.eip-=1;
+	printf("0x%lx\n", process->regs.eip);
+	ptrace(PTRACE_SETREGS, process->pid, NULL, &process->regs);
+	ptrace(PTRACE_POKETEXT, process->pid, process->regs.eip, breakpoint);
 }
 
 void Debugger::readData(UINT_T addr, size_t size, void* data)

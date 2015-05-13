@@ -6,6 +6,7 @@
 #include "type.h"
 #include <string>
 #include <gelf.h>
+#include <sys/user.h>
 
 namespace skyin {
 
@@ -33,9 +34,9 @@ private:
 	Module* mainModule;
 	std::map<UINT_T, Module*> modules;
 	Debugger* debugger;
+	struct user_regs_struct regs;
 public:
 	Process(int pid, std::string inputPath);
-//	initMainModule();
 	void initModules();
 };
 

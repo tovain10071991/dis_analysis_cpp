@@ -5,11 +5,13 @@
 #include <sys/wait.h>	//wait
 #include <string>		//string
 #include <gelf.h>		//elf_version
+#include <iostream>
+#include <fstream>
 
 //#include "type"
 #include "file.h"			//文件类
 #include "dbg.h"			//调试器类
-//#include "any"		//分析类
+#include "any.h"		//分析类
 #include "proc.h"			//进程类
 
 using namespace std;
@@ -28,6 +30,7 @@ inline void par_process(int pid, string inputPath)
 	Process* process = new Process(pid, inputPath);
 	//初始化调试器类,执行跳过ld
 	Debugger* debugger = new Debugger(process);
+	Analyser* analyser = new Analyser(debugger);
 	//获取已装载模块的信息
 	process->initModules();
 

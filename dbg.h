@@ -1,7 +1,6 @@
 #ifndef _DBG_H_
 #define _DBG_H_
 
-#include <sys/user.h>
 #include "type.h"
 #include "proc.h"
 
@@ -12,7 +11,6 @@ class Process;
 class Debugger {
 private:
 	UINT_T breakpoint;				//断点地址
-	struct user_regs_struct regs;
 	Process* process;
 //	ModuleInfo* mainModule;
 	void setBreakRecover(UINT_T addr);
