@@ -36,6 +36,8 @@ private:
 public:
 	Analyser(Debugger* debugger, File* file);
 	void readTrace();
+//	void readTrace(UINT_T addr);
+	void updateTrace();
 	void disassemble();
 };
 

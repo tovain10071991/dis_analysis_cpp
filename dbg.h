@@ -15,10 +15,11 @@ private:
 	Process* process;
 //	ModuleInfo* mainModule;
 	void setBreakRecover(UINT_T addr);
+	void setBreakRecoverH(UINT_T addr);
 public:
 	Debugger(Process* process);
 	void readData(UINT_T addr, size_t size, void* data);
-	void singalStep();
+	void singleStep();
 };
 
 }

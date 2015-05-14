@@ -36,6 +36,11 @@ inline void par_process(int pid, string inputPath)
 	process->initModules();
 
 	analyser->readTrace();
+	while(1)
+	{		
+		analyser->updateTrace();
+//		debugger->contTrace();
+	}
 //	analyser->disassemble();
 
 	//以trace为粒度，每执行一个trace，就进行反汇编

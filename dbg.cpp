@@ -6,7 +6,8 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <fstream> 
+#include <fstream>
+#include <iostream>
 
 using namespace skyin;
 
@@ -16,7 +17,7 @@ Debugger::Debugger(Process* process):
 //		mainModule(mainModule)
 {
 	process->debugger=this;
-	setBreakRecover(process->mainModule->ehdr.e_entry);
+	setBreakRecoverH(process->mainModule->ehdr.e_entry);
 }
 
 void Debugger::setBreakRecover(UINT_T addr)
@@ -42,6 +43,19 @@ void Debugger::setBreakRecover(UINT_T addr)
 	ptrace(PTRACE_POKETEXT, process->pid, process->regs.eip, breakpoint);
 }
 
+void Debugger::setBreakRecoverH(UINT_T addr)
+{
+	UINT_T dr0, dr7;
+	dr7 = 0x1;
+	dr0 = addr;
+	ptrace(PTRACE_POKEUSER, process->pid, offsetof(struct user, u_debugreg[7]), dr7);
+	ptrace(PTRACE_POKEUSER, process->pid, offsetof(struct user, u_debugreg[0]), dr0);
+	ptrace(PTRACE_CONT, process->pid, 0, 0);
+	wait(NULL);
+	ptrace(PTRACE_GETREGS, process->pid, NULL, &process->regs);
+	cout << "meet breakpointH: 0x" << process->regs.eip << endl;
+}
+
 void Debugger::readData(UINT_T addr, size_t size, void* data)
 {
 	size_t ts = (size+4)/4;
@@ -54,7 +68,14 @@ void Debugger::readData(UINT_T addr, size_t size, void* data)
 	free(tmp);
 }
 
-void Debugger::singalStep()
+void Debugger::singleStep()
 {
+	UINT_T oldEip = process->regs.eip;
 	ptrace(PTRACE_SINGLESTEP, process->pid, 0, 0);
+	while(oldEip == process->regs.eip)
+	{
+		ptrace(PTRACE_GETREGS, process->pid, NULL, &process->regs);
+	}
+	std::cout << "single: 0x" << process->regs.eip << endl;
+	
 }
