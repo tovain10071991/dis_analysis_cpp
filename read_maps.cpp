@@ -35,7 +35,6 @@ inline void par_process(int pid, string inputPath)
 	//获取已装载模块的信息
 	process->initModules();
 
-	analyser->readTrace();
 	while(1)
 	{		
 		analyser->updateTrace();

@@ -20,16 +20,17 @@ Analyser::Analyser(Debugger* debugger, File* file):
 	ud_init(&ud_obj);
 	ud_set_mode(&ud_obj, 32);
 	ud_set_syntax(&ud_obj, UD_SYN_ATT);
-	
+	readTrace(process->regs.eip);
+	disassemble();
 }
 
-void Analyser::readTrace()
+void Analyser::readTrace(UINT_T addr)
 {
-	debugger->readData(process->regs.eip, 50, trace);
+	debugger->readData(addr, 50, trace);
 	ud_set_input_buffer(&ud_obj, (uint8_t*)trace, 50);
-	file->disOutput << "process->regs.eip:0x" << process->regs.eip << endl;
-	ud_set_pc(&ud_obj, process->regs.eip);
-	disassemble();
+	file->disOutput << "process->regs.eip:0x" << addr << endl;
+	ud_set_pc(&ud_obj, addr);
+	
 }
 
 void Analyser::updateTrace()
@@ -37,7 +38,8 @@ void Analyser::updateTrace()
 	
 	debugger->setBreakRecoverH(branch.first);
 	debugger->singleStep();
-	readTrace();
+	readTrace(process->regs.eip);
+	disassemble();
 }
 
 void Analyser::disassemble()

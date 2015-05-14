@@ -35,8 +35,8 @@ private:
 	UINT_T pltHandler(UINT_T addr);
 public:
 	Analyser(Debugger* debugger, File* file);
-	void readTrace();
-//	void readTrace(UINT_T addr);
+//	void readTrace();
+	void readTrace(UINT_T addr);
 	void updateTrace();
 	void disassemble();
 };
