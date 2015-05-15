@@ -1,22 +1,25 @@
 #ifndef _PROC_H_
 #define _PROC_H_
 
-#include <vector>
-#include "any.h"
-#include "dbg.h"
-#include "type.h"
 #include <string>
 #include <gelf.h>
+#include <vector>
 #include <sys/user.h>
+#include "type.h"
+#include <fstream>
+#include "dbg.h"
+
+using namespace std;
+
+extern ofstream fmodule;
+
 
 namespace skyin {
 
 class Debugger;
-class Analyser;
 
 class Process {
 	friend class Debugger;
-	friend class Analyser;
 private:
 	class Module {
 	public:
@@ -24,22 +27,19 @@ private:
 		Elf*		elf;
 		GElf_Ehdr	ehdr;
 		UINT_T		baseAddr;
+		size_t		size;
 		UINT_T		gotPltAddr;
 		UINT_T		pltAddr;
 		size_t		pltSize;
+	public:
 		Module(UINT_T base, std::string path);
-//		Module(int fd, std::string path);
-	private:
-		void initInfo(int fd);
 	};
-	int mainFd;	//用于elf
 	int pid;
-	Module* mainModule;
-	std::vector<Module*> modules;
 	Debugger* debugger;
+	vector<Module*> modules;
 	struct user_regs_struct regs;
 public:
-	Process(int pid, std::string inputPath);
+	Process(int pid, string mainPath);
 	void initModules();
 };
 

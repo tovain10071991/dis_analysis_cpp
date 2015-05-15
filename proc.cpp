@@ -1,25 +1,18 @@
 #include "proc.h"
-#include "file.h"
-#include <gelf.h>
-#include <string>
 #include <fcntl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <cstring>
-#include <iostream>
-#include <fstream>
+#include <sys/stat.h>
 #include <link.h>
+#include <stdlib.h>
+
 
 using namespace std;
 using namespace skyin;
 
-Process::Process(int pid, string inputPath):
-		pid(pid),
-		modules()
+Process::Process(int pid, string mainPath):
+		pid(pid)
 {
-	regs={0};
-	//先找到进程入口吧
-	mainModule = new Module(0, inputPath);
+	Module* mainModule = new Module(0, mainPath);
 	modules.push_back(mainModule);
 }
 
@@ -28,8 +21,7 @@ void Process::initModules()
 	//从主模块获取链接信息
 	struct link_map* lm = (struct link_map*)malloc(sizeof(struct link_map));
 	struct link_map* lmPtr;
-	debugger->readData(mainModule->gotPltAddr+4, 4, &lmPtr);
-	cout << lmPtr << endl;
+	debugger->readData(modules[0]->gotPltAddr+4, 4, &lmPtr);
 	debugger->readData((UINT_T)lmPtr, sizeof(struct link_map), lm);
 	while((lmPtr=lm->l_next)!=NULL)
 	{
@@ -38,15 +30,24 @@ void Process::initModules()
 		debugger->readData((UINT_T)lm->l_name, 50, name);
 		if(!strcmp(name,""))
 			continue;
-		cout << lm->l_addr << "\t" << name << endl;
 		string path(name);
 		Module* module = new Module(lm->l_addr, path);
 		modules.push_back(module);
 	}
+	fmodule << "baseAddr\tpltAddr\tgotPlatAddr\tname\n";
+	for(vector<Module*>::iterator iter=modules.begin();iter!=modules.end();++iter)
+		fmodule << (*iter)->baseAddr << "\t" << (*iter)->pltAddr << "\t" << (*iter)->gotPltAddr << "\t" << (*iter)->path << endl;
 }
 
-void Process::Module::initInfo(int fd)
+Process::Module::Module(UINT_T base, string path):
+		path(path),
+		baseAddr(base)
 {
+	int fd = open(path.c_str(), O_RDONLY, 0);
+	struct stat st;
+	fstat(fd, &st);
+	size = st.st_size;
+	elf = elf_begin(fd, ELF_C_READ, NULL);
 	gelf_getehdr(elf, &ehdr);
 	//从section查找.plt基址和大小和.got.plt表基址
 	Elf_Scn* scn = NULL;
@@ -67,7 +68,6 @@ void Process::Module::initInfo(int fd)
 				if(dyn.d_tag==DT_PLTGOT)
 				{
 					gotPltAddr = dyn.d_un.d_ptr+baseAddr;
-					cout << ".got.plt: 0x" << gotPltAddr << endl;
 					continue;
 				}
 			}
@@ -79,13 +79,4 @@ void Process::Module::initInfo(int fd)
 			continue;
 		}
 	}
-}
-
-Process::Module::Module(UINT_T base, string path):
-		baseAddr(base),
-		path(path)
-{
-	int fd = open(path.c_str(), O_RDONLY, 0);
-	elf = elf_begin(fd, ELF_C_READ, NULL);
-	initInfo(fd);
 }
