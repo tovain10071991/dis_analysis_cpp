@@ -31,7 +31,6 @@ private:
 		UINT_T		gotPltAddr;
 		UINT_T		pltAddr;
 		size_t		pltSize;
-	public:
 		Module(UINT_T base, std::string path);
 	};
 	int pid;

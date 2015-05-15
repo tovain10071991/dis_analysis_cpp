@@ -14,6 +14,7 @@ using namespace skyin;
 ofstream fmodule;
 ofstream fdebugger;
 ofstream fdis;
+ofstream ftaint;
 
 /*******************************************************
  * par_process()
@@ -25,9 +26,11 @@ inline void par_process(int pid, string inputPath)
 	fmodule.open("module.out");
 	fdebugger.open("debugger.out");
 	fdis.open("dis.out");
+	ftaint.open("taint.out");
 	fmodule	<< hex;
 	fdebugger << hex;
 	fdis << hex;
+	ftaint << hex;
 	cout << hex;
 	elf_version(EV_CURRENT);
 
@@ -35,13 +38,13 @@ inline void par_process(int pid, string inputPath)
 	Debugger* debugger = new Debugger(process);
 	process->initModules();
 	while(debugger->updateTrace());
-//	while(debugger->readTrace())
-//	{
-//		debugger->disassemble();
-//	}
 
 	ptrace(PTRACE_CONT, pid, 0, 0);
 	wait(NULL);
+	fmodule.close();
+	fdebugger.close();
+	fdis.close();
+	ftaint.close();
 }
 
 /*******************************************************

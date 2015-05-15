@@ -38,10 +38,10 @@ void Debugger::readData(UINT_T addr, size_t size, void* data)
 
 bool Debugger::readTrace()
 {
-	size_t traceSize = traceMin;
-	void* tmpTrace = malloc(traceMin);
-	readData(process->regs.eip, traceMin, tmpTrace);
-	ud_set_input_buffer(&ud_obj, (uint8_t*)tmpTrace, traceMin);
+	size_t traceSize = TRACEMIN;
+	void* tmpTrace = malloc(TRACEMIN);
+	readData(process->regs.eip, TRACEMIN, tmpTrace);
+	ud_set_input_buffer(&ud_obj, (uint8_t*)tmpTrace, TRACEMIN);
 	ud_set_pc(&ud_obj, process->regs.eip);
 	trace  = realloc(trace, traceSize);
 	memcpy(trace, tmpTrace, traceSize);
@@ -56,18 +56,19 @@ bool Debugger::readTrace()
 				printf("Error\n");
 				return false;
 			}
-			readData(oldAddr+oldSize, traceMin, tmpTrace);
-			ud_set_input_buffer(&ud_obj, (uint8_t*)tmpTrace, traceMin);
+			readData(oldAddr+oldSize, TRACEMIN, tmpTrace);
+			ud_set_input_buffer(&ud_obj, (uint8_t*)tmpTrace, TRACEMIN);
 			ud_set_pc(&ud_obj, oldAddr+oldSize);
-			traceSize += traceMin;
+			traceSize += TRACEMIN;
 			trace= realloc(trace, traceSize);
-			memcpy((void*)((UINT_T)trace+traceSize-traceMin), tmpTrace, traceMin);
+			memcpy((void*)((UINT_T)trace+traceSize-TRACEMIN), tmpTrace, TRACEMIN);
 			continue;
 		}
 		fdis << "0x" << setiosflags(ios::left)<< setw(8) << (UINT_T)ud_insn_off(&ud_obj) << "\t"
 			 << setw(12) << ud_insn_hex(&ud_obj) << "\t"
 			 << setw(20) << mnemonic_name[ud_insn_mnemonic(&ud_obj)] << "\t"
 			 << ud_insn_asm(&ud_obj) << endl;
+		outputOpr();
 		if(isBranch(&ud_obj))
 		{
 			traceEnd = ud_insn_off(&ud_obj);
@@ -132,11 +133,10 @@ void Debugger::singleStep()
 				 << ud_insn_asm(&ud_obj) << endl;
 
 			ud_opr = ud_insn_opr(&ud_obj, 0);
-			//plt跳转是内存寻址, ud_opr.base是寄存器号
+			//plt跳转是内存寻址, ud_opr->base是寄存器号
 			UINT_T target = 0;
 			if(ud_opr->base!=UD_NONE)
 			{
-//				target = *(UINT_T*)((UINT_T)(&process->regs)+sizeof(long int)*regNoMap[ud_opr->base]);
 				target = (*iter)->gotPltAddr;
 			}
 			target = target + ud_opr->lval.sdword + ud_opr->index*ud_opr->scale;
@@ -175,4 +175,20 @@ void Debugger::contWrite(UINT_T addr)
 	dr7 &= 0xfffffffb;
 	ptrace(PTRACE_POKEUSER, process->pid, offsetof(struct user, u_debugreg[7]), dr7);
 	ptrace(PTRACE_GETREGS, process->pid, NULL, &process->regs);
+}
+
+void Debugger::outputOpr()
+{
+	fdis <<	"\ttype\tsize\tbase\tindex\tscale\toffset\tlval" << endl;
+	for(UINT_T i=0;1;i++)
+	{
+		if((ud_opr=ud_insn_opr(&ud_obj, i))==NULL)
+			break;
+		fdis << i << "\t" << ud_opr->type << "\t" << (UINT_T)ud_opr->size << "\t"
+			 << ud_opr->base << "\t" << ud_opr->index << "\t"
+			 << (UINT_T)ud_opr->scale << "\t" << (UINT_T)ud_opr->offset << "\t"
+			 << ud_opr->lval.sdword << endl;
+	}
+	fdis << endl;
+
 }
