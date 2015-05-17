@@ -10,6 +10,7 @@
 #include <err.h>
 #include <errno.h>
 #include "skycer.h"
+#include <cstring>
 
 using namespace std;
 using namespace skyin;
@@ -24,6 +25,8 @@ Debugger::Debugger(Process* process):
 	ud_set_mode(&ud_obj, 32);
 	ud_set_syntax(&ud_obj, UD_SYN_ATT);
 	contBreak(process->modules[0]->ehdr.e_entry);
+	taint = new Taint();
+	getArgv();
 	readTrace();
 }
 
@@ -79,9 +82,6 @@ bool Debugger::readTrace()
 			 << setw(12) << ud_insn_hex(&ud_obj) << "\t"
 			 << setw(20) << mnemonic_name[ud_insn_mnemonic(&ud_obj)] << "\t"
 			 << ud_insn_asm(&ud_obj) << endl;
-
-//		outputOpr();
-
 		if(isBranch(&ud_obj))
 		{
 			traceEnd = ud_insn_off(&ud_obj);
@@ -187,25 +187,42 @@ bool Debugger::contWrite(UINT_T addr)
 	dr7 = ret|0x00100104;
 	PTRACEASSERT(PTRACE_POKEUSER, process->pid, offsetof(struct user, u_debugreg[7]), dr7, "write to reg dr7", "contWrite");
 	PTRACEASSERT(PTRACE_POKEUSER, process->pid, offsetof(struct user, u_debugreg[1]), dr1, "write to reg dr1", "contWrite");
-//	errno = 0;
-//	UINT_T tmp = ptrace(PTRACE_PEEKDATA, process->pid, addr, 0);
-//	UINT_T tmp;
-//	if(tmp == 0xffffffff||errno!=0)
-//		err(errno, "PTRACE_PEEKDATA in contWrite");	
 	do {
 		PTRACEASSERT(PTRACE_CONT, process->pid, 0, 0, "continue tracee", "contWrite");
 		WAITASSERT("contWrite");
 		PTRACEASSERT(PTRACE_PEEKUSER, process->pid, offsetof(struct user, u_debugreg[6]), 0, "read to var dr6", "contWrite");
 		dr6 = ret;
 	} while(!(dr6&0x2));
-//		errno = 0;
-//		while((tmp = ptrace(PTRACE_PEEKDATA, process->pid, addr, 0))==0xffffffff&&errno!=0)
-//		{
-//			err(errno, "PTRACE_PEEKDATA in contWrite");
-//		}
 	PTRACEASSERT(PTRACE_PEEKUSER, process->pid, offsetof(struct user, u_debugreg[7]), dr7, "read to var dr1", "contWrite");
 	dr7 = ret&0xfffffffb;
 	PTRACEASSERT(PTRACE_POKEUSER, process->pid, offsetof(struct user, u_debugreg[7]), dr7, "write to reg dr7", "contWrite");
 	PTRACEASSERT(PTRACE_GETREGS, process->pid, NULL, &process->regs, "get regs", "singleStep");
 	return true;
+}
+
+void Debugger::getArgv()
+{
+	size_t strMin = 3;
+	size_t strSize = 1;
+	UINT_T mainArgc, mainArgvPtr;
+	char* mainArgv = NULL;
+	char* tmpStr = (char*)malloc(strMin+1);
+	tmpStr[strMin] = '\0';
+	readData(process->regs.esp, 4, &mainArgc);
+	fargv << "main's argc: 0x" << mainArgc << endl;
+	for(UINT_T i=0; i<mainArgc; i++)
+	{
+		readData(process->regs.esp+4+4*i, 4, &mainArgvPtr);
+		do {
+			readData(mainArgvPtr+strSize-1, strMin, tmpStr);
+			strSize += strMin;
+			mainArgv = (char*)realloc(mainArgv, strSize);
+			memcpy((char*)((UINT_T)mainArgv+strSize-1-strMin), tmpStr, strMin);
+			mainArgv[strSize-1] = '\0';
+		} while(strlen(mainArgv)==strSize-1);
+		fargv << "main's argv " << i << " : " << mainArgv <<  "\t0x" << mainArgvPtr  << " ~ 0x"<<  mainArgvPtr+strlen(mainArgv) << endl;
+		taint->addMem(mainArgvPtr, mainArgvPtr+strlen(mainArgv)+1);
+	}
+	free(mainArgv);
+	free(tmpStr);
 }

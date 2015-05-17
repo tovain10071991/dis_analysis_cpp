@@ -9,7 +9,7 @@ using namespace skyin;
 	do { \
 		errno = 0; \
 		if(wait(&status)==-1) \
-			err(errno, "wait"); \
+			err(errno, "wait in %s", func); \
 		if(WIFEXITED(status)) \
 		{ \
 			cout << "tracee normally exit in " << func << "(): " << WEXITSTATUS(status) << endl; \

@@ -19,6 +19,7 @@ using namespace skyin;
 extern ofstream fdebugger;
 extern ofstream fdis;
 extern ofstream ftaint;
+extern ofstream fargv;
 
 namespace skyin {
 
@@ -31,7 +32,7 @@ private:
 		map<UINT_T, UINT_T> taintMem;	//基址-尾址+1
 		bool taintReg[REGNOMAX];		//寄存器号,true表示为脏
 		Taint();
-		void addMem(UINT_T start, UINT_T end);
+		UINT_T addMem(UINT_T start, UINT_T end);
 		void delMem(UINT_T start, UINT_T end);
 	};
 	Process* process;
@@ -39,10 +40,12 @@ private:
 	UINT_T traceEnd;
 	ud_t ud_obj;
 	const ud_operand_t* ud_opr;
+	Taint* taint;
 	bool contBreak(UINT_T addr);
 	bool contWrite(UINT_T addr);
 	bool singleStep();
 	bool readTrace();
+	void getArgv();
 public:
 	Debugger(Process* process);
 	bool readData(UINT_T addr, size_t size, void* data);

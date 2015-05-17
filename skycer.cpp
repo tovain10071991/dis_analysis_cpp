@@ -18,6 +18,8 @@ extern int errno;
 ofstream fmodule;
 ofstream fdebugger;
 ofstream fdis;
+ofstream fargv;
+ofstream ftaint;
 
 /*******************************************************
  * par_process()
@@ -26,24 +28,26 @@ inline bool parProcess(int pid, string inputPath)
 {
 	int status;
 	UINT_T ret;
+	cout << hex;
+	cerr << hex;
 	WAITASSERT("parProcess");
 	fmodule.open("module.out");
 	fdebugger.open("debugger.out");
 	fdis.open("dis.out");
+	fargv.open("argv.out");
+	ftaint.open("taint.out");
 	fmodule	<< hex;
 	fdebugger << hex;
 	fdis << hex;
-	cout << hex;
+	fargv << hex;
+	ftaint << hex;
+
 	if(elf_version(EV_CURRENT)==EV_NONE)
 		errx(elf_errno(), "elf_version in parProcess(): %s\n", elf_errmsg(elf_errno()));
 	Process* process = new Process(pid, inputPath);
 	Debugger* debugger = new Debugger(process);
 	process->initModules();
 	while(debugger->updateTrace());
-//	while(debugger->readTrace())
-//	{
-//		debugger->disassemble();
-//	}
 
 	PTRACEASSERT(PTRACE_CONT, pid, 0, 0, "continue tracee", "parProcess");
 	WAITASSERT("parProcess");
@@ -66,7 +70,7 @@ int main()
 		{
 			err(errno, "be traced in child");
 		}
-		execl(inputPath.c_str(), "tracee", NULL);
+		execl(inputPath.c_str(), "tracee", "/", NULL);
 	}
 	else if(pid>0)
 	{

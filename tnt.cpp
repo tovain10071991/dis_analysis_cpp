@@ -3,6 +3,8 @@
 using namespace std;
 using namespace skyin;
 
+extern 
+
 Debugger::Taint::Taint()
 {
 	for(int i=0;i<REGNOMAX;i++)
@@ -11,8 +13,9 @@ Debugger::Taint::Taint()
 	taintMem[0xffffffff]=0xffffffff;
 }
 
-void Debugger::Taint::addMem(UINT_T start, UINT_T end)
+UINT_T Debugger::Taint::addMem(UINT_T start, UINT_T end)
 {
+	ftaint << "add mem: 0x" << start << " ~ 0x" << end-1 << endl;
 	//先与前项合并
 	map<UINT_T, UINT_T>::iterator preIter;
 	map<UINT_T, UINT_T>::iterator iter = taintMem.begin();
@@ -39,4 +42,17 @@ void Debugger::Taint::addMem(UINT_T start, UINT_T end)
 		(*preIter).second = (*preIter).second>(*iter).second?(*preIter).second:(*iter).second;
 		taintMem.erase(iter);
 	}
+	return (*preIter).first;
+}
+
+void Debugger::Taint::delMem(UINT_T start, UINT_T end)
+{
+	UINT_T tmp = addMem(start, end);
+	map<UINT_T, UINT_T>::iterator iter = taintMem.find(tmp);
+	if((*iter).second>end)
+		taintMem[end] = (*iter).second;
+	iter = taintMem.find(tmp);
+	if((*iter).first==start)
+		taintMem.erase(iter);
+	(*iter).second = start;
 }
