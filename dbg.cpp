@@ -55,7 +55,7 @@ bool Debugger::readTrace()
 	ud_set_input_buffer(&ud_obj, (uint8_t*)tmpTrace, TRACEMIN);
 	ud_set_pc(&ud_obj, process->regs.eip);
 	trace  = realloc(trace, traceSize);
-	memcpy(trace, TRACEMIN, traceSize);
+	memcpy(trace, tmpTrace, traceSize);
 	UINT_T oldAddr=0;
 	UINT_T oldSize=0;
 	while (1)
@@ -67,12 +67,12 @@ bool Debugger::readTrace()
 				printf("Maybe have finished\n");
 				return false;
 			}
-			readData(oldAddr+oldSize, traceMin, tmpTrace);
-			ud_set_input_buffer(&ud_obj, (uint8_t*)tmpTrace, traceMin);
+			readData(oldAddr+oldSize, TRACEMIN, tmpTrace);
+			ud_set_input_buffer(&ud_obj, (uint8_t*)tmpTrace, TRACEMIN);
 			ud_set_pc(&ud_obj, oldAddr+oldSize);
-			traceSize += traceMin;
+			traceSize += TRACEMIN;
 			trace= realloc(trace, traceSize);
-			memcpy((void*)((UINT_T)trace+traceSize-traceMin), tmpTrace, traceMin);
+			memcpy((void*)((UINT_T)trace+traceSize-TRACEMIN), tmpTrace, TRACEMIN);
 			continue;
 		}
 		fdis << "0x" << setiosflags(ios::left)<< setw(8) << (UINT_T)ud_insn_off(&ud_obj) << "\t"
@@ -80,7 +80,7 @@ bool Debugger::readTrace()
 			 << setw(20) << mnemonic_name[ud_insn_mnemonic(&ud_obj)] << "\t"
 			 << ud_insn_asm(&ud_obj) << endl;
 
-		outputOpr();
+//		outputOpr();
 
 		if(isBranch(&ud_obj))
 		{

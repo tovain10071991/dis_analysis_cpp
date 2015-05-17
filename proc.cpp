@@ -4,11 +4,8 @@
 #include <sys/stat.h>
 #include <link.h>
 #include <stdlib.h>
-<<<<<<< HEAD
 #include <err.h>
 #include <errno.h>
-=======
->>>>>>> c3ae9f1bf5a6f9f1d1bd676df5cea5276c768117
 
 
 using namespace std;
@@ -25,11 +22,8 @@ void Process::initModules()
 {
 	//从主模块获取链接信息
 	struct link_map* lm = (struct link_map*)malloc(sizeof(struct link_map));
-<<<<<<< HEAD
 	if(lm==NULL)
 		errx(-1, "malloc: fail to allocate link_map\n");
-=======
->>>>>>> c3ae9f1bf5a6f9f1d1bd676df5cea5276c768117
 	struct link_map* lmPtr;
 	debugger->readData(modules[0]->gotPltAddr+4, 4, &lmPtr);
 	debugger->readData((UINT_T)lmPtr, sizeof(struct link_map), lm);
@@ -53,7 +47,6 @@ Process::Module::Module(UINT_T base, string path):
 		path(path),
 		baseAddr(base)
 {
-<<<<<<< HEAD
 	errno = 0;
 	int fd = open(path.c_str(), O_RDONLY, 0);
 	if(fd == -1)
@@ -67,20 +60,11 @@ Process::Module::Module(UINT_T base, string path):
 		errx(elf_errno(), "%s elf_begin: %s\n", path.c_str(), elf_errmsg(elf_errno()));
 	if(gelf_getehdr(elf, &ehdr)==NULL)
 		errx(elf_errno(), "%s gelf_getehdr: %s\n", path.c_str(), elf_errmsg(elf_errno()));
-=======
-	int fd = open(path.c_str(), O_RDONLY, 0);
-	struct stat st;
-	fstat(fd, &st);
-	size = st.st_size;
-	elf = elf_begin(fd, ELF_C_READ, NULL);
-	gelf_getehdr(elf, &ehdr);
->>>>>>> c3ae9f1bf5a6f9f1d1bd676df5cea5276c768117
 	//从section查找.plt基址和大小和.got.plt表基址
 	Elf_Scn* scn = NULL;
 	GElf_Shdr shdr;
 	char* secName;
 	size_t		shdrstrndx;		//节名符号表索引
-<<<<<<< HEAD
 	if(elf_getshdrstrndx(elf, &shdrstrndx)==-1)
 		errx(elf_errno(), "%s elf_getshdrstrndx: %s\n", path.c_str(), elf_errmsg(elf_errno()));
 	while((scn=elf_nextscn(elf, scn))!=NULL)
@@ -92,15 +76,6 @@ Process::Module::Module(UINT_T base, string path):
 			Elf_Data* data = elf_getdata(scn, NULL);
 			if(data==NULL)
 				errx(elf_errno(), "%s elf_getdata: %s\n", path.c_str(), elf_errmsg(elf_errno()));
-=======
-	elf_getshdrstrndx(elf, &shdrstrndx);
-	while((scn=elf_nextscn(elf, scn))!=NULL)
-	{
-		gelf_getshdr(scn, &shdr);
-		if(shdr.sh_type==SHT_DYNAMIC)
-		{
-			Elf_Data* data = elf_getdata(scn, NULL);
->>>>>>> c3ae9f1bf5a6f9f1d1bd676df5cea5276c768117
 			Elf32_Dyn dyn;
 			for(UINT_T i=0;i<data->d_size;i+=sizeof(Elf32_Dyn))
 			{
@@ -112,12 +87,8 @@ Process::Module::Module(UINT_T base, string path):
 				}
 			}
 		}
-<<<<<<< HEAD
 		if((secName = elf_strptr(elf, shdrstrndx, shdr.sh_name))==NULL)
 			errx(elf_errno(), "%s elf_strptr: %s\n", path.c_str(), elf_errmsg(elf_errno()));
-=======
-		secName = elf_strptr(elf, shdrstrndx, shdr.sh_name);
->>>>>>> c3ae9f1bf5a6f9f1d1bd676df5cea5276c768117
 		if(!strcmp(secName, ".plt")){
 			pltAddr = shdr.sh_addr+baseAddr;
 			pltSize = shdr.sh_size;
