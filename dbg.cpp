@@ -47,15 +47,15 @@ bool Debugger::readData(UINT_T addr, size_t size, void* data)
 
 bool Debugger::readTrace()
 {
-	size_t traceSize = traceMin;
-	void* tmpTrace = malloc(traceMin);
+	size_t traceSize = TRACEMIN;
+	void* tmpTrace = malloc(TRACEMIN);
 	if(tmpTrace==NULL)
 		errx(-1, "malloc: fail to allocate tmpTrace in readTrace()");
-	readData(process->regs.eip, traceMin, tmpTrace);
-	ud_set_input_buffer(&ud_obj, (uint8_t*)tmpTrace, traceMin);
+	readData(process->regs.eip, TRACEMIN, tmpTrace);
+	ud_set_input_buffer(&ud_obj, (uint8_t*)tmpTrace, TRACEMIN);
 	ud_set_pc(&ud_obj, process->regs.eip);
 	trace  = realloc(trace, traceSize);
-	memcpy(trace, tmpTrace, traceSize);
+	memcpy(trace, TRACEMIN, traceSize);
 	UINT_T oldAddr=0;
 	UINT_T oldSize=0;
 	while (1)
@@ -79,6 +79,9 @@ bool Debugger::readTrace()
 			 << setw(12) << ud_insn_hex(&ud_obj) << "\t"
 			 << setw(20) << mnemonic_name[ud_insn_mnemonic(&ud_obj)] << "\t"
 			 << ud_insn_asm(&ud_obj) << endl;
+
+		outputOpr();
+
 		if(isBranch(&ud_obj))
 		{
 			traceEnd = ud_insn_off(&ud_obj);
@@ -94,6 +97,7 @@ bool Debugger::updateTrace()
 {
 	if(!contBreak(traceEnd))
 		return false;
+
 	singleStep();
 	return readTrace();
 }
@@ -137,6 +141,7 @@ bool Debugger::singleStep()
 		{
 			//反汇编得到目标地址所在的.got.plt表中偏移
 			void* pltIns = malloc(6);
+
 			if(pltIns==NULL)
 				errx(-1, "malloc: fail to allocate pltIns\n");
 			readData(eip, 6, pltIns);
@@ -150,7 +155,7 @@ bool Debugger::singleStep()
 				 << ud_insn_asm(&ud_obj) << endl;
 
 			ud_opr = ud_insn_opr(&ud_obj, 0);
-			//plt跳转是内存寻址, ud_opr.base是寄存器号
+			//plt跳转是内存寻址, ud_opr->base是寄存器号
 			UINT_T target = 0;
 			if(ud_opr->base!=UD_NONE)
 			{
