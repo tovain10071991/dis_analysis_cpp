@@ -10,7 +10,7 @@
 using namespace std;
 using namespace skyin;
 
-#define TRACEMIN 10
+#define TRACEMIN 30		//至少不小于最长指令的长度,否则那条长指令永远也无法成功读取和反汇编
 #define REGNOMAX 17		//基于struct user_regs_struct
 
 #define isBranch(ud_obj) \

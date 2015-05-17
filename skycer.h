@@ -9,16 +9,16 @@ using namespace skyin;
 	do { \
 		errno = 0; \
 		if(wait(&status)==-1) \
-			err(errno, "wait in %s", func); \
+			err(errno, "======wait in %s", func); \
 		if(WIFEXITED(status)) \
 		{ \
-			cout << "tracee normally exit in " << func << "(): " << WEXITSTATUS(status) << endl; \
+			cout << "======tracee normally exit in " << func << "(): " << WEXITSTATUS(status) << endl; \
 			return false;\
 		}\
-		if(WIFSTOPPED(status)&&WSTOPSIG(status)!=SIGTRAP) \
-			errx(-1, "don't hanlder this STOPSIG in the beginning of %s(): %d", func, WSTOPSIG(status)); \
+		if(WIFSTOPPED(status)&&WSTOPSIG(status)!=SIGTRAP&&WSTOPSIG(status)!=SIGCHLD) \
+			errx(-1, "======don't hanlder this STOPSIG in the beginning of %s(): %d", func, WSTOPSIG(status)); \
 		if(WIFSIGNALED(status)) \
-			errx(-1, "don't hanlder this TERMSIG in the beginning of %s(): %d", func, WTERMSIG(status)); \
+			errx(-1, "======don't hanlder this TERMSIG in the beginning of %s(): %d", func, WTERMSIG(status)); \
 	} while(0)
 
 #define PTRACEASSERT(req, pid, addr, data, event, func) \
@@ -29,12 +29,12 @@ using namespace skyin;
 			if(errno==ESRCH) \
 			{ \
 				WAITASSERT(func); \
-				warn("warn: %s in %s()", event, func); \
+				warn("======warn: %s in %s()", event, func); \
 				errno = 0; \
 				continue; \
 			} \
 			else \
-				err(errno, "%s in %s()", event, func); \
+				err(errno, "======%s in %s()", event, func); \
 		} \
 	} while(0)
 

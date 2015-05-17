@@ -57,10 +57,12 @@ inline bool parProcess(int pid, string inputPath)
 /*******************************************************
  * main()
  *******************************************************/
-int main()
+int main(int argc, char** argv)
 {
 	int pid;
-	string inputPath("/bin/ls");
+	if(argc <2)
+		errx(-1, "arguments fault");
+	string inputPath(argv[1]);
 	errno = 0;
 	//fork进程
 	pid=fork();
@@ -70,7 +72,8 @@ int main()
 		{
 			err(errno, "be traced in child");
 		}
-		execl(inputPath.c_str(), "tracee", "/", NULL);
+		if(execv(inputPath.c_str(), argv+1)==-1)
+			err(errno, "execv in child");
 	}
 	else if(pid>0)
 	{

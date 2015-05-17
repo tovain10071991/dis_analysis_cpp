@@ -132,6 +132,7 @@ bool Debugger::singleStep()
 	UINT_T ret;
 	UINT_T eip;
 	PTRACEASSERT(PTRACE_SINGLESTEP, process->pid, 0, 0, "single step", "singleStep");
+	WAITASSERT("singleStep");
 	PTRACEASSERT(PTRACE_PEEKUSER, process->pid, offsetof(struct user_regs_struct, eip), 0, "read to var eip", "singleStep");
 	eip = ret;
 	//如果指令在.plt段,就跳过
