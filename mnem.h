@@ -7,16 +7,16 @@ namespace skyin {
 
 std::string mnemonic_name[]={
 	"invalid",
-	"3dnow",
+	"3dnow",		// AMD的多媒体指令
 	"none",
-	"db",
-	"pause",
-	"aaa",
-	"aad",
-	"aam",
-	"aas",
-	"adc",
-	"add",
+	"db",			// 伪指令,define byte
+	"pause",		// 自旋锁提示
+	"aaa",			//加法后调整,aaa,修改ax
+	"aad",			//除法前调整,aad,修改ax
+	"aam",			//乘法后调整,aam,修改ax
+	"aas",			//减法后调整,aas,修改ax
+	"adc",			//带进位加,adc src des
+	"add",			//加法
 	"addpd",
 	"addps",
 	"addsd",
@@ -656,6 +656,28 @@ std::string mnemonic_name[]={
 	"crc32",
 	"C_CODE",
 };
+
+//如果被读操作数是脏,就将被写操作数标记为脏,否则标记为非脏
+#define HANDLE_BINARY(n) \
+	do { \
+		switch(n) { \
+		case UD_Ixor: \
+		case UD_Imov: \
+		case UD_Iand: \
+		case UD_Iadd: \
+		case UD_Isub: \
+			ud_opr = ud_insn_opr(&ud_obj, 1); \
+			if(ud_opr->type == UP_OP_REG) \
+			{ \
+				if(taintReg[ud_opr->base]) \
+					taintFlag = ture; \
+			} \
+			else if(ud_opr->type ==UD_OP_MEM) \
+			{ \
+				\
+			} \
+		} \
+	} while(0)
 
 }
 

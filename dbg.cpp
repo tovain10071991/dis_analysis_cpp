@@ -15,6 +15,10 @@
 using namespace std;
 using namespace skyin;
 
+/*******************************************************
+ * Debugger::Debugger() - Debugger对象的构造函数,初始化libudis86,执行跳过ld直到进程主模块入口,初始化模块信息,初始化污点信息
+ * process - 被跟踪进程的Process对象
+ *******************************************************/
 Debugger::Debugger(Process* process):
 		process(process),
 		traceEnd(0)
@@ -24,12 +28,26 @@ Debugger::Debugger(Process* process):
 	ud_init(&ud_obj);
 	ud_set_mode(&ud_obj, 32);
 	ud_set_syntax(&ud_obj, UD_SYN_ATT);
+	//初始化xed
+	xed_state_zero(&xedState);
+	xed_state_init2(&xedState, XED_MACHINE_MODE_LEGACY_32, XED_ADDRESS_WIDTH_32b);
+	xed_tables_init();
 	contBreak(process->modules[0]->ehdr.e_entry);
+	process->initModules();
 	taint = new Taint();
 	getArgv();
+	//首先读入第一个trace
 	readTrace();
+	readTrace2();
 }
 
+/*******************************************************
+ * Debugger::readData() - 读进程空间数据,保存到data指向的缓冲区中
+ * addr - 读数据的基址
+ * size - 读数据的字节数
+ * data - 指向待保存数据的缓冲区
+ * 返回值 - 成功返回true
+ *******************************************************/
 bool Debugger::readData(UINT_T addr, size_t size, void* data)
 {
 	int status;
@@ -48,6 +66,10 @@ bool Debugger::readData(UINT_T addr, size_t size, void* data)
 	return true;
 }
 
+/*******************************************************
+ * Debugger::readTrace() - 读一个trace,以分支指令结尾,跟新寄存器上下文信息和读写内存记录,更新污点信息
+ * 返回值 - 读取成功返回true,执行结束返回false
+ *******************************************************/
 bool Debugger::readTrace()
 {
 	size_t traceSize = TRACEMIN;
@@ -79,9 +101,11 @@ bool Debugger::readTrace()
 			continue;
 		}
 		fdis << "0x" << setiosflags(ios::left)<< setw(8) << (UINT_T)ud_insn_off(&ud_obj) << "\t"
-			 << setw(12) << ud_insn_hex(&ud_obj) << "\t"
-			 << setw(20) << mnemonic_name[ud_insn_mnemonic(&ud_obj)] << "\t"
+			 << setw(22) << ud_insn_hex(&ud_obj) << "\t"
+			 << setw(10) << ud_lookup_mnemonic(ud_insn_mnemonic(&ud_obj)) << "\t"
 			 << ud_insn_asm(&ud_obj) << endl;
+		//根据每条指令的内存/寄存器读写更新污点信息
+
 		if(isBranch(&ud_obj))
 		{
 			traceEnd = ud_insn_off(&ud_obj);
@@ -93,15 +117,66 @@ bool Debugger::readTrace()
 	}
 }
 
+/*******************************************************
+ * Debugger::readTrace() - 读一个trace,以分支指令结尾,跟新寄存器上下文信息和读写内存记录,更新污点信息
+ * 返回值 - 读取成功返回true,执行结束返回false
+ *******************************************************/
+bool Debugger::readTrace2()
+{
+	UINT_T lenSum = 0;
+	int insLen = 15;
+	size_t traceSize = TRACEMIN;
+	void* tmpTrace = malloc(TRACEMIN);
+	char decoded_buf[50] = "";
+	UINT_T addr = process->regs.eip;
+	xed_decoded_inst_t decodedInst;
+	xed_decoded_inst_zero_set_mode(&decodedInst, &xedState);
+	readData(addr, TRACEMIN, tmpTrace);
+	trace = realloc(trace, traceSize);
+	memcpy(trace, tmpTrace, traceSize);
+	while(1)
+	{
+		insLen = traceSize-lenSum>=15?15:traceSize-lenSum;
+		xed_decoded_inst_zero_keep_mode(&decodedInst);
+		xed_decode(&decodedInst, (xed_uint8_t*)((UINT_T)trace+lenSum), insLen);
+		if(!(xed_decoded_inst_valid(&decodedInst)))
+		{
+			readData(addr, TRACEMIN, tmpTrace);
+			traceSize = lenSum+TRACEMIN;
+			trace = realloc(trace, traceSize);
+			memcpy((void*)((UINT_T)trace+lenSum), tmpTrace, TRACEMIN);
+			continue;
+		}
+		xed_format_context(XED_SYNTAX_ATT, &decodedInst, decoded_buf, 49, addr, 0, 0);
+		fdis2 << "0x" << addr << "\t" << decoded_buf << endl;
+		xed_category_enum_t cate = xed_decoded_inst_get_category(&decodedInst);
+		if(cate==XED_CATEGORY_COND_BR||cate==XED_CATEGORY_CALL||cate==XED_CATEGORY_RET||cate==XED_CATEGORY_SYSCALL||cate==XED_CATEGORY_SYSRET||cate==XED_CATEGORY_UNCOND_BR)
+			break;
+		lenSum += xed_decoded_inst_get_length(&decodedInst);
+		addr += xed_decoded_inst_get_length(&decodedInst);
+	}
+	return true;
+}
+
+/*******************************************************
+ * Debugger::updateTrace() - 执行上一个trace,读取下一个trace
+ * 返回值 - 读取成功返回true
+ *******************************************************/
 bool Debugger::updateTrace()
 {
 	if(!contBreak(traceEnd))
 		return false;
 
 	singleStep();
+	readTrace2();
 	return readTrace();
 }
 
+/*******************************************************
+ * Debugger::contBreak() - 执行到addr
+ * addr - 断点地址
+ * 返回值 - 执行成功返回true
+ *******************************************************/
 bool Debugger::contBreak(UINT_T addr)
 {
 	int status;
@@ -126,6 +201,10 @@ bool Debugger::contBreak(UINT_T addr)
 	return true;
 }
 
+/*******************************************************
+ * Debugger::singleStep() - 单步执行
+ * 返回值 - 执行成功返回true
+ *******************************************************/
 bool Debugger::singleStep()
 {
 	int status;
@@ -151,8 +230,8 @@ bool Debugger::singleStep()
 			ud_disassemble(&ud_obj);
 
 			fdis << "0x" << setiosflags(ios::left)<< setw(8) << ud_insn_off(&ud_obj) << "\t"
-				 << setw(12) << ud_insn_hex(&ud_obj) << "\t"
-				 << setw(20) << mnemonic_name[ud_insn_mnemonic(&ud_obj)] << "\t"
+				 << setw(22) << ud_insn_hex(&ud_obj) << "\t"
+				 << setw(10) << ud_lookup_mnemonic(ud_insn_mnemonic(&ud_obj)) << "\t"
 				 << ud_insn_asm(&ud_obj) << endl;
 
 			ud_opr = ud_insn_opr(&ud_obj, 0);
@@ -178,6 +257,11 @@ bool Debugger::singleStep()
 	return true;
 }
 
+/*******************************************************
+ * Debugger::contWrite() - 设置观察点后执行
+ * addr - 被观察的数据地址
+ * 返回值 - 执行成功返回true
+ *******************************************************/
 bool Debugger::contWrite(UINT_T addr)
 {
 	int status;
@@ -201,6 +285,9 @@ bool Debugger::contWrite(UINT_T addr)
 	return true;
 }
 
+/*******************************************************
+ * Debugger::getArgv() - 读取命令行传入参数
+ *******************************************************/
 void Debugger::getArgv()
 {
 	size_t strMin = 3;

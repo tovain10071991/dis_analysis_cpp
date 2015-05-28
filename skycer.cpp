@@ -20,9 +20,13 @@ ofstream fdebugger;
 ofstream fdis;
 ofstream fargv;
 ofstream ftaint;
+ofstream fdis2;
 
 /*******************************************************
- * par_process()
+ * par_process() - 父进程的工作,初始化包括打开记录文件,创建Process对象和Debugger对象,以trace为单位,由Debugger做各种事
+ * pid - 被跟踪的子进程的pid
+ * inputPath - 被跟踪子进程的可执行文件路径
+ * 返回值 - 成功执行返回true
  *******************************************************/
 inline bool parProcess(int pid, string inputPath)
 {
@@ -36,17 +40,21 @@ inline bool parProcess(int pid, string inputPath)
 	fdis.open("dis.out");
 	fargv.open("argv.out");
 	ftaint.open("taint.out");
+	fdis2.open("dis2.out");
 	fmodule	<< hex;
 	fdebugger << hex;
 	fdis << hex;
 	fargv << hex;
 	ftaint << hex;
+	fdis2 << hex;
 
 	if(elf_version(EV_CURRENT)==EV_NONE)
 		errx(elf_errno(), "elf_version in parProcess(): %s\n", elf_errmsg(elf_errno()));
+	//创建Process对象,绑定被跟踪进程
 	Process* process = new Process(pid, inputPath);
+	//创建Debugger对象,绑定Process对象
 	Debugger* debugger = new Debugger(process);
-	process->initModules();
+	//以trace为单位进行操作
 	while(debugger->updateTrace());
 
 	PTRACEASSERT(PTRACE_CONT, pid, 0, 0, "continue tracee", "parProcess");
@@ -55,7 +63,8 @@ inline bool parProcess(int pid, string inputPath)
 }
 
 /*******************************************************
- * main()
+ * main() - fork子进程被跟踪,父进程开始自己的工作
+ * argv[1] - 目标可执行文件的路径
  *******************************************************/
 int main(int argc, char** argv)
 {

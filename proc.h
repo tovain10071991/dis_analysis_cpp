@@ -11,9 +11,6 @@
 
 using namespace std;
 
-extern ofstream fmodule;
-
-
 namespace skyin {
 
 class Debugger;
@@ -38,6 +35,7 @@ private:
 	Debugger* debugger;
 	vector<Module*> modules;
 	struct user_regs_struct regs;
+	ofstream fmodule;
 public:
 	Process(int pid, string mainPath);
 	void initModules();

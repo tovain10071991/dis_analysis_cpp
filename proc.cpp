@@ -11,13 +11,23 @@
 using namespace std;
 using namespace skyin;
 
+/*******************************************************
+ * Process::Process() - Process对象的构造函数,绑定主模块的Module对象
+ * pid - 被跟踪子进程的pid
+ * mainPath - 主模块的文件路径
+ *******************************************************/
 Process::Process(int pid, string mainPath):
 		pid(pid)
 {
+	fmodule.open("module.out");
+	fmodule	<< hex;
 	Module* mainModule = new Module(0, mainPath);
 	modules.push_back(mainModule);
 }
 
+/*******************************************************
+ * Process::initModules() - 初始化所有已加载模块,在(由Debugger)跳过ld执行到主模块的入口处之后调用,通过链接信息读取已加载模块的信息,一次创建Module对象,加进Process::modules向量中
+ *******************************************************/
 void Process::initModules()
 {
 	//从主模块获取链接信息
@@ -43,6 +53,11 @@ void Process::initModules()
 		fmodule << (*iter)->baseAddr << "\t" << (*iter)->pltAddr << "\t" << (*iter)->gotPltAddr << "\t" << (*iter)->path << endl;
 }
 
+/*******************************************************
+ * Process::Module::Module() - Module对象的构造函数,主要从模块对应文件中从读取ELF信息,顺便输出
+ * base - 模块在进程空间的基址,主模块的基址显示为0
+ * path - 模块对应的可执行文件路径
+ *******************************************************/
 Process::Module::Module(UINT_T base, string path):
 		path(path),
 		baseAddr(base)
